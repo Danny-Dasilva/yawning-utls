@@ -65,7 +65,7 @@ func (e *SNIExtension) Read(b []byte) (int, error) {
 	b[0] = byte(extensionServerName >> 8)
 	b[1] = byte(extensionServerName)
 	b[2] = byte((len(e.ServerName) + 5) >> 8)
-	b[3] = byte((len(e.ServerName) + 5))
+	b[3] = byte(len(e.ServerName) + 5)
 	b[4] = byte((len(e.ServerName) + 3) >> 8)
 	b[5] = byte(len(e.ServerName) + 3)
 	// b[6] Server Name Type: host_name (0)
@@ -101,6 +101,36 @@ func (e *StatusRequestExtension) Read(b []byte) (int, error) {
 	return e.Len(), io.EOF
 }
 
+type StatusRequestV2Extension struct {
+}
+
+func (e *StatusRequestV2Extension) writeToUConn(uc *UConn) error {
+	uc.HandshakeState.Hello.OcspStapling = true
+	return nil
+}
+
+func (e *StatusRequestV2Extension) Len() int {
+	return 13
+}
+
+func (e *StatusRequestV2Extension) Read(b []byte) (int, error) {
+	if len(b) < e.Len() {
+		return 0, io.ErrShortBuffer
+	}
+	// RFC 4366, section 3.6
+	b[0] = byte(17 >> 8)
+	b[1] = byte(17)
+	b[2] = 0
+	b[3] = 9
+	b[4] = 0
+	b[5] = 7
+	b[6] = 2 // OCSP type
+	b[7] = 0
+	b[8] = 4
+	// Two zero valued uint16s for the two lengths.
+	return e.Len(), io.EOF
+}
+
 type SupportedCurvesExtension struct {
 	Curves []CurveID
 }
@@ -123,9 +153,9 @@ func (e *SupportedCurvesExtension) Read(b []byte) (int, error) {
 	b[0] = byte(extensionSupportedCurves >> 8)
 	b[1] = byte(extensionSupportedCurves)
 	b[2] = byte((2 + 2*len(e.Curves)) >> 8)
-	b[3] = byte((2 + 2*len(e.Curves)))
+	b[3] = byte(2 + 2*len(e.Curves))
 	b[4] = byte((2 * len(e.Curves)) >> 8)
-	b[5] = byte((2 * len(e.Curves)))
+	b[5] = byte(2 * len(e.Curves))
 	for i, curve := range e.Curves {
 		b[6+2*i] = byte(curve >> 8)
 		b[7+2*i] = byte(curve)
@@ -154,8 +184,8 @@ func (e *SupportedPointsExtension) Read(b []byte) (int, error) {
 	b[0] = byte(extensionSupportedPoints >> 8)
 	b[1] = byte(extensionSupportedPoints)
 	b[2] = byte((1 + len(e.SupportedPoints)) >> 8)
-	b[3] = byte((1 + len(e.SupportedPoints)))
-	b[4] = byte((len(e.SupportedPoints)))
+	b[3] = byte(1 + len(e.SupportedPoints))
+	b[4] = byte(len(e.SupportedPoints))
 	for i, pointFormat := range e.SupportedPoints {
 		b[5+i] = pointFormat
 	}
@@ -183,9 +213,40 @@ func (e *SignatureAlgorithmsExtension) Read(b []byte) (int, error) {
 	b[0] = byte(extensionSignatureAlgorithms >> 8)
 	b[1] = byte(extensionSignatureAlgorithms)
 	b[2] = byte((2 + 2*len(e.SupportedSignatureAlgorithms)) >> 8)
-	b[3] = byte((2 + 2*len(e.SupportedSignatureAlgorithms)))
+	b[3] = byte(2 + 2*len(e.SupportedSignatureAlgorithms))
 	b[4] = byte((2 * len(e.SupportedSignatureAlgorithms)) >> 8)
-	b[5] = byte((2 * len(e.SupportedSignatureAlgorithms)))
+	b[5] = byte(2 * len(e.SupportedSignatureAlgorithms))
+	for i, sigAndHash := range e.SupportedSignatureAlgorithms {
+		b[6+2*i] = byte(sigAndHash >> 8)
+		b[7+2*i] = byte(sigAndHash)
+	}
+	return e.Len(), io.EOF
+}
+
+type SignatureAlgorithmsCertExtension struct {
+	SupportedSignatureAlgorithms []SignatureScheme
+}
+
+func (e *SignatureAlgorithmsCertExtension) writeToUConn(uc *UConn) error {
+	uc.HandshakeState.Hello.SupportedSignatureAlgorithms = e.SupportedSignatureAlgorithms
+	return nil
+}
+
+func (e *SignatureAlgorithmsCertExtension) Len() int {
+	return 6 + 2*len(e.SupportedSignatureAlgorithms)
+}
+
+func (e *SignatureAlgorithmsCertExtension) Read(b []byte) (int, error) {
+	if len(b) < e.Len() {
+		return 0, io.ErrShortBuffer
+	}
+	// https://tools.ietf.org/html/rfc5246#section-7.4.1.4.1
+	b[0] = byte(extensionSignatureAlgorithmsCert >> 8)
+	b[1] = byte(extensionSignatureAlgorithmsCert)
+	b[2] = byte((2 + 2*len(e.SupportedSignatureAlgorithms)) >> 8)
+	b[3] = byte(2 + 2*len(e.SupportedSignatureAlgorithms))
+	b[4] = byte((2 * len(e.SupportedSignatureAlgorithms)) >> 8)
+	b[5] = byte(2 * len(e.SupportedSignatureAlgorithms))
 	for i, sigAndHash := range e.SupportedSignatureAlgorithms {
 		b[6+2*i] = byte(sigAndHash >> 8)
 		b[7+2*i] = byte(sigAndHash)
@@ -539,9 +600,9 @@ func (e *KeyShareExtension) Read(b []byte) (int, error) {
 	b[1] = byte(extensionKeyShare)
 	keySharesLen := e.keySharesLen()
 	b[2] = byte((keySharesLen + 2) >> 8)
-	b[3] = byte((keySharesLen + 2))
+	b[3] = byte(keySharesLen + 2)
 	b[4] = byte((keySharesLen) >> 8)
-	b[5] = byte((keySharesLen))
+	b[5] = byte(keySharesLen)
 
 	i := 6
 	for _, ks := range e.KeyShares {
@@ -583,7 +644,7 @@ func (e *PSKKeyExchangeModesExtension) Read(b []byte) (int, error) {
 
 	modesLen := len(e.Modes)
 	b[2] = byte((modesLen + 1) >> 8)
-	b[3] = byte((modesLen + 1))
+	b[3] = byte(modesLen + 1)
 	b[4] = byte(modesLen)
 
 	if len(e.Modes) > 0 {
@@ -623,7 +684,7 @@ func (e *SupportedVersionsExtension) Read(b []byte) (int, error) {
 	b[0] = byte(extensionSupportedVersions >> 8)
 	b[1] = byte(extensionSupportedVersions)
 	b[2] = byte((extLen + 1) >> 8)
-	b[3] = byte((extLen + 1))
+	b[3] = byte(extLen + 1)
 	b[4] = byte(extLen)
 
 	i := 5
@@ -689,6 +750,44 @@ func (e *FakeChannelIDExtension) Read(b []byte) (int, error) {
 	return e.Len(), io.EOF
 }
 
+type FakeCertCompressionAlgsExtension struct {
+	Methods []CertCompressionAlgo
+}
+
+func (e *FakeCertCompressionAlgsExtension) writeToUConn(uc *UConn) error {
+	return nil
+}
+
+func (e *FakeCertCompressionAlgsExtension) Len() int {
+	return 4 + 1 + (2 * len(e.Methods))
+}
+
+func (e *FakeCertCompressionAlgsExtension) Read(b []byte) (int, error) {
+	if len(b) < e.Len() {
+		return 0, io.ErrShortBuffer
+	}
+	// https://tools.ietf.org/html/draft-balfanz-tls-channelid-00
+	b[0] = byte(fakeCertCompressionAlgs >> 8)
+	b[1] = byte(fakeCertCompressionAlgs & 0xff)
+
+	extLen := 2 * len(e.Methods)
+	if extLen > 255 {
+		return 0, errors.New("too many certificate compression methods")
+	}
+
+	b[2] = byte((extLen + 1) >> 8)
+	b[3] = byte((extLen + 1) & 0xff)
+	b[4] = byte(extLen)
+
+	i := 5
+	for _, compMethod := range e.Methods {
+		b[i] = byte(compMethod >> 8)
+		b[i+1] = byte(compMethod)
+		i += 2
+	}
+	return e.Len(), io.EOF
+}
+
 type FakeRecordSizeLimitExtension struct {
 	Limit uint16
 }
@@ -714,5 +813,76 @@ func (e *FakeRecordSizeLimitExtension) Read(b []byte) (int, error) {
 
 	b[4] = byte(e.Limit >> 8)
 	b[5] = byte(e.Limit & 0xff)
+	return e.Len(), io.EOF
+}
+
+type DelegatedCredentialsExtension struct {
+	AlgorithmsSignature []SignatureScheme
+}
+
+func (e *DelegatedCredentialsExtension) writeToUConn(uc *UConn) error {
+	return nil
+}
+
+func (e *DelegatedCredentialsExtension) Len() int {
+	return 6 + 2*len(e.AlgorithmsSignature)
+}
+
+func (e *DelegatedCredentialsExtension) Read(b []byte) (int, error) {
+	if len(b) < e.Len() {
+		return 0, io.ErrShortBuffer
+	}
+	b[0] = byte(extensionDelegatedCredentials >> 8)
+	b[1] = byte(extensionDelegatedCredentials)
+	b[2] = byte((2 + 2*len(e.AlgorithmsSignature)) >> 8)
+	b[3] = byte(2 + 2*len(e.AlgorithmsSignature))
+	b[4] = byte((2 * len(e.AlgorithmsSignature)) >> 8)
+	b[5] = byte(2 * len(e.AlgorithmsSignature))
+	for i, sigAndHash := range e.AlgorithmsSignature {
+		b[6+2*i] = byte(sigAndHash >> 8)
+		b[7+2*i] = byte(sigAndHash)
+	}
+	return e.Len(), io.EOF
+}
+
+type ApplicationSettingsExtension struct {
+	SupportedALPNList []string
+}
+
+func (e *ApplicationSettingsExtension) writeToUConn(uc *UConn) error {
+	return nil
+}
+
+func (e *ApplicationSettingsExtension) Len() int {
+	result := 6 //id + first length + second length
+	for _, element := range e.SupportedALPNList {
+		result += 1 + len(element) //byte for string length + allocation for string in bytes
+	}
+	return result
+}
+
+func (e *ApplicationSettingsExtension) Read(b []byte) (int, error) {
+	if len(b) < e.Len() {
+		return 0, io.ErrShortBuffer
+	}
+
+	b[0] = byte(extensionApplicationSettings >> 8)
+	b[1] = byte(0x69)
+	currentIndex := 6
+
+	for _, alpn := range e.SupportedALPNList {
+		b[currentIndex] = byte(len(alpn)) //set length of string in bytes
+		currentIndex++
+		for _, char := range alpn {
+			b[currentIndex] = byte(char) //convert char to byte
+			currentIndex++
+		}
+	}
+
+	b[2] = 0x00
+	b[3] = byte(e.Len() - 4) //len minus id and itself (2+2)
+	b[4] = 0x00
+	b[5] = byte(e.Len() - 6) //len minus id big length and itself 5 (2+2+2)
+
 	return e.Len(), io.EOF
 }

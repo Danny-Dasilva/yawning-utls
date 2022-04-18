@@ -22,7 +22,8 @@ const (
 	// extensions with 'fake' prefix break connection, if server echoes them back
 	fakeExtensionChannelID uint16 = 30032 // not IANA assigned
 
-	fakeRecordSizeLimit uint16 = 0x001c
+	fakeCertCompressionAlgs uint16 = 0x001b
+	fakeRecordSizeLimit     uint16 = 0x001c
 )
 
 const (
@@ -36,10 +37,11 @@ const (
 	FAKE_OLD_TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256 = uint16(0xcc15) // we can try to craft these ciphersuites
 	FAKE_TLS_DHE_RSA_WITH_AES_128_GCM_SHA256           = uint16(0x009e) // from existing pieces, if needed
 
-	FAKE_TLS_DHE_RSA_WITH_AES_128_CBC_SHA  = uint16(0x0033)
-	FAKE_TLS_DHE_RSA_WITH_AES_256_CBC_SHA  = uint16(0x0039)
-	FAKE_TLS_RSA_WITH_RC4_128_MD5          = uint16(0x0004)
-	FAKE_TLS_EMPTY_RENEGOTIATION_INFO_SCSV = uint16(0x00ff)
+	FAKE_TLS_DHE_RSA_WITH_AES_128_CBC_SHA    = uint16(0x0033)
+	FAKE_TLS_DHE_RSA_WITH_AES_256_CBC_SHA    = uint16(0x0039)
+	FAKE_TLS_DHE_RSA_WITH_AES_256_GCM_SHA384 = uint16(0x009f)
+	FAKE_TLS_RSA_WITH_RC4_128_MD5            = uint16(0x0004)
+	FAKE_TLS_EMPTY_RENEGOTIATION_INFO_SCSV   = uint16(0x00ff)
 )
 
 // newest signatures
@@ -138,18 +140,20 @@ var (
 	HelloRandomizedNoALPN = ClientHelloID{helloRandomizedNoALPN, helloAutoVers, nil}
 
 	// The rest will will parrot given browser.
-	HelloFirefox_Auto = HelloFirefox_65
+	HelloFirefox_Auto = HelloFirefox_99
 	HelloFirefox_55   = ClientHelloID{helloFirefox, "55", nil}
 	HelloFirefox_56   = ClientHelloID{helloFirefox, "56", nil}
 	HelloFirefox_63   = ClientHelloID{helloFirefox, "63", nil}
 	HelloFirefox_65   = ClientHelloID{helloFirefox, "65", nil}
+	HelloFirefox_99   = ClientHelloID{helloFirefox, "99", nil}
 
-	HelloChrome_Auto = HelloChrome_83
+	HelloChrome_Auto = HelloChrome_100
 	HelloChrome_58   = ClientHelloID{helloChrome, "58", nil}
 	HelloChrome_62   = ClientHelloID{helloChrome, "62", nil}
 	HelloChrome_70   = ClientHelloID{helloChrome, "70", nil}
 	HelloChrome_72   = ClientHelloID{helloChrome, "72", nil}
 	HelloChrome_83   = ClientHelloID{helloChrome, "83", nil}
+	HelloChrome_100  = ClientHelloID{helloFirefox, "100", nil}
 
 	HelloIOS_Auto = HelloIOS_12_1
 	HelloIOS_11_1 = ClientHelloID{helloIOS, "111", nil} // legacy "111" means 11.1
@@ -159,6 +163,20 @@ var (
 // based on spec's GreaseStyle, GREASE_PLACEHOLDER may be replaced by another GREASE value
 // https://tools.ietf.org/html/draft-ietf-tls-grease-01
 const GREASE_PLACEHOLDER = 0x0a0a
+
+func isGREASEUint16(v uint16) bool {
+	// First byte is same as second byte
+	// and lowest nibble is 0xa
+	return ((v >> 8) == v&0xff) && v&0xf == 0xa
+}
+
+func unGREASEUint16(v uint16) uint16 {
+	if isGREASEUint16(v) {
+		return GREASE_PLACEHOLDER
+	} else {
+		return v
+	}
+}
 
 // utlsMacSHA384 returns a SHA-384 based MAC. These are only supported in TLS 1.2
 // so the given version is ignored.
