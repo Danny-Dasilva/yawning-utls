@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"time"
 
-	"gitlab.com/yawning/utls.git"
+	tls "github.com/Danny-Dasilva/utls.git"
 	"golang.org/x/net/http2"
 )
 
